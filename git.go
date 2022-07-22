@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
@@ -32,7 +33,11 @@ func NewGit(dir, repository, remote, ref string, auth transport.AuthMethod) *Git
 }
 
 func (g *Git) ReposPath() string {
-	return g.dir + string(filepath.Separator) + filepath.Base(g.repository)
+	dirName := filepath.Base(g.repository)
+	if strings.HasPrefix(dirName, "git@") {
+		dirName = strings.TrimSuffix(dirName, ".git")
+	}
+	return g.dir + string(filepath.Separator) + dirName
 }
 
 func (g *Git) Clone(ctx context.Context) error {

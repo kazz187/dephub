@@ -16,6 +16,7 @@ type Command struct {
 	Dockerfile *string
 	ImageName  *string
 	Tag        *string
+	Run        *bool
 }
 
 func NewCommand() *Command {
@@ -30,6 +31,7 @@ func NewCommand() *Command {
 		Dockerfile: app.Flag("dockerfile", "The Dockerfile path for docker build").Short('f').Default("Dockerfile").String(),
 		ImageName:  app.Flag("image_name", "The image name for docker build").Short('i').Required().String(),
 		Tag:        app.Flag("tag", "The tag name for docker build").Short('t').Default("latest").String(),
+		Run:        app.Flag("run", "Run a build on starting").Default("false").Bool(),
 	}
 	kingpin.MustParse(app.Parse(os.Args[1:]))
 	return cmd
