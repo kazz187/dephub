@@ -6,6 +6,9 @@ require (
 	github.com/docker/docker v20.10.17+incompatible
 	github.com/go-git/go-git/v5 v5.4.2
 	github.com/google/go-github/v45 v45.2.0
+	github.com/xanzy/ssh-agent v0.3.0
+	golang.org/x/crypto v0.0.0-20210817164053-32db794688a5
+	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
 	gopkg.in/alecthomas/kingpin.v2 v2.2.6
 )
 
@@ -35,8 +38,6 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/sergi/go-diff v1.1.0 // indirect
 	github.com/sirupsen/logrus v1.4.1 // indirect
-	github.com/xanzy/ssh-agent v0.3.0 // indirect
-	golang.org/x/crypto v0.0.0-20210817164053-32db794688a5 // indirect
 	golang.org/x/net v0.0.0-20210326060303-6b1517762897 // indirect
 	golang.org/x/sys v0.0.0-20210927094055-39ccf1dd6fa6 // indirect
 	golang.org/x/time v0.0.0-20220609170525-579cf78fd858 // indirect

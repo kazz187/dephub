@@ -60,6 +60,14 @@ func (d *Docker) Build(ctx context.Context) error {
 	return nil
 }
 
+func (d *Docker) Save(ctx context.Context) (io.ReadCloser, error) {
+	res, err := d.cli.ImageSave(ctx, []string{fmt.Sprintf("%s:%s", d.imageName, d.tag)})
+	if err != nil {
+		return nil, fmt.Errorf("failed to save image: %w", err)
+	}
+	return res, nil
+}
+
 func (d *Docker) Context() (*bytes.Reader, error) {
 	buf := new(bytes.Buffer)
 	tw := tar.NewWriter(buf)
@@ -102,4 +110,8 @@ func (d *Docker) Context() (*bytes.Reader, error) {
 		return nil, fmt.Errorf("failed to walk directory: %w", err)
 	}
 	return bytes.NewReader(buf.Bytes()), nil
+}
+
+func (d *Docker) ImageTag() string {
+	return fmt.Sprintf("%s:%s", d.imageName, d.tag)
 }

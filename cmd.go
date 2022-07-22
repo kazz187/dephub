@@ -17,6 +17,8 @@ type Command struct {
 	ImageName  *string
 	Tag        *string
 	Run        *bool
+	SSH        *[]string
+	Post       *string
 }
 
 func NewCommand() *Command {
@@ -32,6 +34,8 @@ func NewCommand() *Command {
 		ImageName:  app.Flag("image_name", "The image name for docker build").Short('i').Required().String(),
 		Tag:        app.Flag("tag", "The tag name for docker build").Short('t').Default("latest").String(),
 		Run:        app.Flag("run", "Run a build on starting").Default("false").Bool(),
+		SSH:        app.Flag("ssh", "Deploy target (\"user@host:port\")").Strings(),
+		Post:       app.Flag("post", "Post command to run after loading docker image").String(),
 	}
 	kingpin.MustParse(app.Parse(os.Args[1:]))
 	return cmd

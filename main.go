@@ -14,6 +14,9 @@ import (
 	githttp "github.com/go-git/go-git/v5/plumbing/transport/http"
 	gitssh "github.com/go-git/go-git/v5/plumbing/transport/ssh"
 	"github.com/google/go-github/v45/github"
+	sshagent "github.com/xanzy/ssh-agent"
+	"golang.org/x/crypto/ssh"
+	"golang.org/x/sync/errgroup"
 )
 
 var cmd = NewCommand()
@@ -44,7 +47,12 @@ func pushEventHandler(ctx context.Context, event *github.PushEvent) error {
 		return errors.New("unsupported ref: " + *event.Ref)
 	}
 
-	return runCD(ctx)
+	err := runCD(context.Background())
+	if err != nil {
+		fmt.Println("failed to run cd:", err)
+		return errors.New("failed to run cd")
+	}
+	return nil
 }
 
 func runCD(ctx context.Context) error {
@@ -75,6 +83,64 @@ func runCD(ctx context.Context) error {
 	if err := docker.Build(ctx); err != nil {
 		return fmt.Errorf("failed to build docker image: %w", err)
 	}
+
+	// Deploy to all targets
+	eg := errgroup.Group{}
+	for _, s := range *cmd.SSH {
+		sshStr := s
+		eg.Go(func() error {
+			err := deployToTarget(ctx, docker, sshStr)
+			if err != nil {
+				return fmt.Errorf("failed to deploy docker image to %s: %w", sshStr, err)
+			}
+			return nil
+		})
+	}
+	return eg.Wait()
+}
+
+func deployToTarget(ctx context.Context, docker *Docker, target string) error {
+	// Docker save
+	pipe, err := docker.Save(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to save docker image: %w", err)
+	}
+
+	a, _, err := sshagent.New()
+	if err != nil {
+		return fmt.Errorf("failed to create ssh agent: %w", err)
+	}
+
+	// Docker load over ssh
+	s, err := NewSSHFromString(target, []ssh.AuthMethod{ssh.PublicKeysCallback(a.Signers)})
+	if err != nil {
+		return fmt.Errorf("failed to create ssh client: %w", err)
+	}
+
+	stdout, stderr, err := s.Run(fmt.Sprintf("sudo docker rmi -f %s", docker.ImageTag()))
+	if err != nil {
+		return fmt.Errorf("failed to load docker image: %w", err)
+	}
+	fmt.Println(stdout)
+	fmt.Println(stderr)
+
+	stdout, stderr, err = s.RunWithPipe("sudo docker load", pipe)
+	if err != nil {
+		return fmt.Errorf("failed to load docker image: %w", err)
+	}
+	fmt.Println(stdout)
+	fmt.Println(stderr)
+
+	if cmd.Post == nil {
+		return nil
+	}
+	stdout, stderr, err = s.Run(*cmd.Post)
+	if err != nil {
+		return fmt.Errorf("failed to run post command: %w", err)
+	}
+	fmt.Println(stdout)
+	fmt.Println(stderr)
+
 	return nil
 }
 
