@@ -20,12 +20,19 @@ import (
 )
 
 var cmd = NewCommand()
+var slackCli = NewSlack(*cmd.ChanID)
 
 func main() {
 	if *cmd.Run {
 		err := runCD(context.Background())
 		if err != nil {
-			fmt.Println("failed to run cd:", err)
+			if err := slackCli.Post("デプロイ失敗: " + err.Error()); err != nil {
+				fmt.Println("failed to post to slackCli:", err)
+			}
+		} else {
+			if err := slackCli.Post("デプロイ完了"); err != nil {
+				fmt.Println("failed to post to slackCli:", err)
+			}
 		}
 	}
 	if err := http.ListenAndServe(fmt.Sprintf(":%d", *cmd.Port), NewWebhookServer(pushEventHandler)); err != nil {
@@ -47,15 +54,25 @@ func pushEventHandler(ctx context.Context, event *github.PushEvent) error {
 		return errors.New("unsupported ref: " + *event.Ref)
 	}
 
-	err := runCD(context.Background())
+	err := runCD(ctx)
 	if err != nil {
-		fmt.Println("failed to run cd:", err)
+		if err := slackCli.Post("デプロイ失敗: " + err.Error()); err != nil {
+			fmt.Println("failed to post to slackCli:", err)
+		}
 		return errors.New("failed to run cd")
+	} else {
+		if err := slackCli.Post("デプロイ完了"); err != nil {
+			fmt.Println("failed to post to slackCli:", err)
+		}
 	}
 	return nil
 }
 
 func runCD(ctx context.Context) error {
+	if err := slackCli.Post("ビルド開始"); err != nil {
+		fmt.Println("failed to post to slackCli:", err)
+	}
+
 	// Git clone && pull
 	auth, err := githubAuth()
 	if err != nil {
@@ -82,6 +99,10 @@ func runCD(ctx context.Context) error {
 	}
 	if err := docker.Build(ctx); err != nil {
 		return fmt.Errorf("failed to build docker image: %w", err)
+	}
+
+	if err := slackCli.Post("ビルド完了"); err != nil {
+		fmt.Println("failed to post to slackCli:", err)
 	}
 
 	// Deploy to all targets
@@ -117,20 +138,21 @@ func deployToTarget(ctx context.Context, docker *Docker, target string) error {
 		return fmt.Errorf("failed to create ssh client: %w", err)
 	}
 
-	stdout, stderr, err := s.Run(fmt.Sprintf("sudo docker rmi -f %s", docker.ImageTag()))
+	c := fmt.Sprintf("sudo docker rmi -f %s", docker.ImageTag())
+	stdout, stderr, err := s.Run(c)
+	if err != nil {
+		return fmt.Errorf("failed to remove old docker image: %w", err)
+	}
+	printResult(s, c, stdout, stderr)
+
+	c = "sudo docker load"
+	stdout, stderr, err = s.RunWithPipe(c, pipe)
 	if err != nil {
 		return fmt.Errorf("failed to load docker image: %w", err)
 	}
-	fmt.Println(stdout)
-	fmt.Println(stderr)
+	printResult(s, c, stdout, stderr)
 
-	stdout, stderr, err = s.RunWithPipe("sudo docker load", pipe)
-	if err != nil {
-		return fmt.Errorf("failed to load docker image: %w", err)
-	}
-	fmt.Println(stdout)
-	fmt.Println(stderr)
-
+	// Run post command
 	if cmd.Post == nil {
 		return nil
 	}
@@ -138,10 +160,17 @@ func deployToTarget(ctx context.Context, docker *Docker, target string) error {
 	if err != nil {
 		return fmt.Errorf("failed to run post command: %w", err)
 	}
-	fmt.Println(stdout)
-	fmt.Println(stderr)
-
+	printResult(s, *cmd.Post, stdout, stderr)
 	return nil
+}
+
+func printResult(s *SSH, cmd, stdout, stderr string) {
+	if stdout != "" {
+		fmt.Printf("[%s]: %s: stdout: %s", s, cmd, stdout)
+	}
+	if stderr != "" {
+		fmt.Printf("[%s]: %s: stderr: %s", s, cmd, stderr)
+	}
 }
 
 func githubAuth() (transport.AuthMethod, error) {
